@@ -22,3 +22,12 @@ moved {
   to   = aws_s3_bucket_policy.replica_force_ssl[0]
 }
 
+moved {
+  from = aws_s3_bucket_policy.state_force_ssl
+  to   = aws_s3_bucket_policy.state
+}
+
+moved {
+  from = aws_s3_bucket_policy.replica_force_ssl
+  to   = aws_s3_bucket_policy.replica
+}
