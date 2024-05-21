@@ -26,7 +26,12 @@ resource "aws_kms_alias" "this" {
 # Bucket Policies
 #---------------------------------------------------------------------------------------------------
 
-data "aws_iam_policy_document" "state_force_ssl" {
+data "aws_iam_policy_document" "aggregated" {
+  source_policy_documents   = [data.aws_iam_policy_document.state.json]
+  override_policy_documents = var.s3_additional_policy_documents
+}
+
+data "aws_iam_policy_document" "state" {
   statement {
     sid     = "AllowSSLRequestsOnly"
     actions = ["s3:*"]
@@ -45,15 +50,44 @@ data "aws_iam_policy_document" "state_force_ssl" {
       identifiers = ["*"]
     }
   }
+
+  dynamic "statement" {
+    for_each = merge(var.s3_enforce_kms_checks_on_upload ? {
+      RequireEncryptedStorage = {
+        variable = "s3:x-amz-server-side-encryption"
+        values   = ["aws:kms"]
+      }
+      RequireCorrectKmsKey = {
+        variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        values   = [aws_kms_key.this.arn]
+      }
+    } : null, null)
+
+    content {
+      sid       = statement.key
+      actions   = ["s3:PutObject"]
+      effect    = "Deny"
+      resources = ["${aws_s3_bucket.state.arn}/*"]
+      condition {
+        test     = "StringNotEquals"
+        variable = statement.value.variable
+        values   = statement.value.values
+      }
+      principals {
+        identifiers = ["*"]
+        type        = "*"
+      }
+    }
+  }
 }
 
 #---------------------------------------------------------------------------------------------------
 # Bucket
 #---------------------------------------------------------------------------------------------------
 
-resource "aws_s3_bucket_policy" "state_force_ssl" {
+resource "aws_s3_bucket_policy" "state" {
   bucket = aws_s3_bucket.state.id
-  policy = data.aws_iam_policy_document.state_force_ssl.json
+  policy = data.aws_iam_policy_document.aggregated.json
 
   depends_on = [aws_s3_bucket_public_access_block.state]
 }

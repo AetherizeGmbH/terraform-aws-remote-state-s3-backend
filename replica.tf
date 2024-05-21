@@ -135,7 +135,14 @@ resource "aws_iam_policy_attachment" "replication" {
   policy_arn = aws_iam_policy.replication[0].arn
 }
 
-data "aws_iam_policy_document" "replica_force_ssl" {
+data "aws_iam_policy_document" "replica_aggregated" {
+  count = var.enable_replication ? 1 : 0
+
+  source_policy_documents   = [data.aws_iam_policy_document.replica_state[0].json]
+  override_policy_documents = var.s3_additional_policy_documents_replica
+}
+
+data "aws_iam_policy_document" "replica_state" {
   count = var.enable_replication ? 1 : 0
 
   statement {
@@ -154,6 +161,35 @@ data "aws_iam_policy_document" "replica_force_ssl" {
     principals {
       type        = "*"
       identifiers = ["*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = merge(var.s3_enforce_kms_checks_on_upload ? {
+      RequireEncryptedStorage = {
+        variable = "s3:x-amz-server-side-encryption"
+        values   = ["aws:kms"]
+      }
+      RequireCorrectKmsKey = {
+        variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        values   = [aws_kms_key.replica[0].arn]
+      }
+    } : null, null)
+
+    content {
+      sid       = statement.key
+      actions   = ["s3:PutObject"]
+      effect    = "Deny"
+      resources = ["${aws_s3_bucket.replica[0].arn}/*"]
+      condition {
+        test     = "StringNotEquals"
+        variable = statement.value.variable
+        values   = statement.value.values
+      }
+      principals {
+        identifiers = ["*"]
+        type        = "*"
+      }
     }
   }
 }
@@ -248,12 +284,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "replica" {
   }
 }
 
-resource "aws_s3_bucket_policy" "replica_force_ssl" {
+resource "aws_s3_bucket_policy" "replica" {
   count    = var.enable_replication ? 1 : 0
   provider = aws.replica
 
   bucket = aws_s3_bucket.replica[0].id
-  policy = data.aws_iam_policy_document.replica_force_ssl[0].json
+  policy = data.aws_iam_policy_document.replica_aggregated[0].json
 
   depends_on = [aws_s3_bucket_public_access_block.replica]
 }

@@ -207,6 +207,28 @@ variable "s3_bucket_name_replica" {
   }
 }
 
+variable "s3_additional_policy_documents" {
+  type        = list(string)
+  default     = []
+  description = <<-EOT
+    List of IAM policy documents (in JSON format) that are merged together into the generated S3 bucket policy.
+    This policies defined here will take precedence over the policy documents generated in this module, i.e,
+    if you provide a SID that matches one of the generated ones, the generated one will be overridden.
+    EOT
+}
+
+variable "s3_additional_policy_documents_replica" {
+  type        = list(string)
+  default     = []
+  description = "Same as `var.s3_additional_policy_documents` but for the replication bucket."
+}
+
+variable "s3_enforce_kms_checks_on_upload" {
+  type        = bool
+  default     = false
+  description = "Enforces KMS key checks on upload using s3 bucket policies."
+}
+
 #---------------------------------------------------------------------------------------------------
 # Optionally specifying a fixed iam policy name
 #---------------------------------------------------------------------------------------------------
